@@ -23,23 +23,47 @@ mat3 rotationMatrix(vec3 axis,float angle){
         oc*axis.x*axis.y+axis.z*s,oc*axis.y*axis.y+c,oc*axis.y*axis.z-axis.x*s,
     oc*axis.z*axis.x-axis.y*s,oc*axis.y*axis.z+axis.x*s,oc*axis.z*axis.z+c);
 }
+vec3 rotatePoint(vec3 p, vec3 axis, float theta) {
+    float cost = cos(theta);
+    float sint = sin(theta);
+    return p * cost + cross(axis, p) * sint + axis * dot(axis, p) * (1.0 - cost);
+}
 float smin(float a,float b,float k)
 {
     k*=1.;
     float r=exp2(-a/k)+exp2(-b/k);
     return-k*log2(r);
 }
+vec3 sdfOrbit(vec3 p, float time) {
+    float orbitRadius = 1.0;  
+    float orbitSpeed = 1.0;   
+    float spinSpeed = 2.0;    
 
+   
+    float thetaOrbit = time * orbitSpeed;
+    vec3 orbitCenter = vec3(cos(thetaOrbit) * orbitRadius, 0.0, sin(thetaOrbit) * orbitRadius);
+
+    vec3 localP = p - orbitCenter;
+
+    float thetaSpin = time * spinSpeed;
+    vec3 rotatedP = rotatePoint(localP, vec3(0.0, 1.0, 0.0), thetaSpin);
+    return rotatedP;
+}
 float sdf_scene(vec3 position_3d)
 {
-    // float rot_angle = sawtooth(u_time,10.0) * 2.0 * 3.1415; 
-    // mat3 rot=rotationMatrix(vec3(0,.6,2),rot_angle);
-    // float torus=sdTorus(rot*(position_3d-vec3(0,1,1)),vec2(.4,.1));
-    // float sphere=sdSphere(position_3d-vec3(0,0,0),.5);
-    // return smin(torus,sphere,.3);
-
+    float rot_angle = sawtooth(u_time,2.0) * 2.0 * 3.1415; 
+    mat3 rot=rotationMatrix(vec3(1.0,1.6,2),rot_angle);
+   
+    vec3 axis = normalize(vec3(1.0, .0, .0)); // 例如 Y 轴
+    float theta = 2.0* 3.1415 * sawtooth(u_time,5.0); 
+    vec3 rotatedP = sdfOrbit(position_3d-vec3(1,1,1),u_time);
+   
+    float torus=sdTorus(rot*rotatedP,vec2(.4,.1));
     float sphere=sdSphere(position_3d-vec3(0,0,0),.5);
-    return sphere;
+    return smin(torus,sphere,.3);
+
+    // float sphere=sdSphere(position_3d-vec3(0,0,0),.5);
+    // return sphere;
 }
 vec3 calcNormal(vec3 p) {
     const float eps = 0.001;
@@ -51,17 +75,17 @@ vec3 calcNormal(vec3 p) {
 }
 vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     
-    float rot_angle = sawtooth(u_time,3.0) * 2.0 * 3.1415; 
-    mat3 rot=rotationMatrix(vec3(0,.6,2),rot_angle);
+    // float rot_angle = sawtooth(u_time,3.0) * 2.0 * 3.1415; 
+    // mat3 rot=rotationMatrix(vec3(0,.6,2),rot_angle);
     vec3 lightPos = vec3(2.0, 5.0, 3.0);
-    vec3 lightDir = normalize(lightPos *rot - hit_point);
+    vec3 lightDir = normalize(lightPos - hit_point);
     
     // 漫反射
     float diff = max(dot(nom, lightDir), .0);
     vec3 diffuse = diff * vec3(0.0902, 0.4627, 0.4549);  // 橙色材质
     
     // 环境光
-    vec3 ambient = vec3(0.1);
+    vec3 ambient = vec3(0.2);
     
     // 镜面反射
     vec3 reflectDir = reflect(lightDir, nom);
@@ -125,7 +149,7 @@ void main()
     if (d > 200.0){
         color = background(rd);
     }
-    vec3 rgb = pow(color, vec3(1.0/2.2)); // 近似伽马校正
+    // vec3 rgb = pow(color, vec3(1.0/2.2)); // 近似伽马校正
     // vec3 color=hsv2rgb(vec3(d/.1));
-    gl_FragColor=vec4(rgb,1);
+    gl_FragColor=vec4(color,1);
 }
