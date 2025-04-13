@@ -1,3 +1,5 @@
+// #version 330 
+#extension GL_OES_standard_derivatives : enable
 precision highp float;
 uniform vec2 u_resolution;
 uniform float u_time;
@@ -148,6 +150,8 @@ vec3 colorTwinPeaksPattern(vec3 pos, float scale, float thickness, float chevron
     // 根据距离决定颜色：黑色或黄色
     // 使用step函数创建硬边界，或者使用smoothstep创建抗锯齿边界
     float pattern = step(0.0, signed_dist);
+    // float edgeWidth = dFdx(signed_dist) * 1.0; // Use fwidth for AA width independent of scale/zoom
+    // float t = smoothstep(-edgeWidth, edgeWidth, signed_dist);
     
     // 黑色和黄色
     vec3 black = vec3(0.0);
@@ -163,14 +167,16 @@ float sdf_plane_xz(vec3 p)
 {
     return p.y;
 }
+
 float sdf_scene(vec3 position_3d)
 {
     mat3 rot = rotationMatrix(vec3(0, 1.0, 0.0), 3.14 / 2.0);
     float d0 = sdfCurtainInspired(rot*position_3d - vec3(-1.66,0,1.4),u_time*.4);
     float d = sdfCurtainInspired(position_3d - vec3(0,0,0),u_time*.4);
     float d1 = sdf_plane_xz(position_3d);
+    float d2 = sdSphere(position_3d-vec3(-1,0.6,1.4),.4);
 
-    return min(d0,min(d,d1));
+    return min(min(d0,min(d,d1)),d2);
     // return d;
 }
 vec3 calcNormal(vec3 p) {
@@ -180,6 +186,25 @@ vec3 calcNormal(vec3 p) {
         sdf_scene(p + vec3(0,eps,0)) - sdf_scene(p - vec3(0,eps,0)),
         sdf_scene(p + vec3(0,0,eps)) - sdf_scene(p - vec3(0,0,eps))
     ));
+}
+#define PI 3.1415926535897932384626433832795
+vec3 colorOnSphere(vec3 spherePos, float radius, float scale, float thickness, float chevronHeight) {
+    // 首先归一化球体坐标
+    vec3 normPos = normalize(spherePos);
+    
+    // 使用球面坐标转换为UV
+    // 这里使用经度作为x，纬度作为z
+    float u = atan(normPos.z, normPos.x) / (2.0 * PI);
+    float v = asin(normPos.y) / PI;
+    
+    // 调整到0-1范围
+    u = u * 0.5 + 0.5;
+    v = v * 0.5 + 0.5;
+    
+    // 创建虚拟平面位置
+    vec3 planarPos = vec3(u * 2.0 - 1.0, 0.0, v * 2.0 - 1.0);
+    
+    return colorTwinPeaksPattern(planarPos, scale, thickness, chevronHeight);
 }
 vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     
@@ -195,12 +220,15 @@ vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     if (abs(hit_point.y) < 0.01) {
         diffuse = diff * zigzag_color;
     }
+    if (abs(sdSphere(hit_point-vec3(-1,0.6,1.4),.4)) < 0.01) {
+        diffuse = diff * colorOnSphere(hit_point-vec3(-1,0.3,1), .4, 20.5, 1.0, .5);
+    }
     // if (zigzag_color - vec3(0.0) > vec3(0.01)) {
     //     diff * vec3(0.4941, 0.0314, 0.0314);
     // }
     
     // 环境光
-    vec3 ambient = vec3(0.1);
+    vec3 ambient = vec3(0.0);
     
     // 镜面反射
     vec3 reflectDir = reflect(lightDir, nom);
