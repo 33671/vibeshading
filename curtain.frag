@@ -200,7 +200,7 @@ vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     // }
     
     // 环境光
-    vec3 ambient = vec3(0.2);
+    vec3 ambient = vec3(0.1);
     
     // 镜面反射
     vec3 reflectDir = reflect(lightDir, nom);
