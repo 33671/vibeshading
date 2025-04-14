@@ -3,6 +3,14 @@
 precision highp float;
 uniform vec2 u_resolution;
 uniform float u_time;
+float aastep(float threshold, float value) {
+  #ifdef GL_OES_standard_derivatives
+    float afwidth = fwidth(value) * 1.0;
+    return smoothstep(threshold-afwidth, threshold+afwidth, value);
+  #else
+    return step(threshold, value);
+  #endif  
+}
 float sdSphere(vec3 position_3d,float radius)
 {
     return length(position_3d)-radius;
@@ -158,7 +166,7 @@ vec3 colorTwinPeaksPattern(vec3 pos, float scale, float thickness, float chevron
     vec3 yellow = vec3(0.85, 0.75, 0.65);;
     
     // 混合颜色
-    vec3 color = mix(black, yellow, pattern);
+    vec3 color = black * (1.0 - pattern) + yellow * pattern;
     
     // 返回带不透明度的颜色
     return color;
@@ -206,6 +214,21 @@ vec3 colorOnSphere(vec3 spherePos, float radius, float scale, float thickness, f
     
     return colorTwinPeaksPattern(planarPos, scale, thickness, chevronHeight);
 }
+
+float softshadow( in vec3 ro, in vec3 rd, float mint, float w )
+{
+    float res = 1.0;
+    float t = mint;
+    for( int i=0; i<256; i++ )
+    {
+        float h = sdSphere(ro + rd*t -vec3(-1,0.6,1.4),.4);
+        res = min( res, h/(w*t) );
+        t += clamp(h, 0.005, 0.50);
+        if( res<-1.0 || t>255.0 ) break;
+    }
+    res = max(res,-1.0);
+    return 0.25*(1.0+res)*(1.0+res)*(2.0-res);
+}
 vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     
     // float rot_angle = sawtooth(u_time,3.0) * 2.0 * 3.1415; 
@@ -217,8 +240,9 @@ vec3 shading(vec3 hit_point, vec3 nom, vec3 rd) {
     float diff = max(dot(nom, lightDir), .0);
     vec3 zigzag_color = colorTwinPeaksPattern(hit_point, 2.5, .5, 0.35);
     vec3 diffuse = diff * vec3(0.4941, 0.0314, 0.0314);  // 橙色材质
+    float shadow_color = softshadow(hit_point, lightDir, 1.0, .4);
     if (abs(hit_point.y) < 0.01) {
-        diffuse = diff * zigzag_color;
+        diffuse = diff * zigzag_color * shadow_color;
     }
     if (abs(sdSphere(hit_point-vec3(-1,0.6,1.4),.4)) < 0.01) {
         diffuse = diff * colorOnSphere(hit_point-vec3(-1,0.3,1), .4, 20.5, 1.0, .5);
@@ -278,6 +302,25 @@ vec3 hsv2rgb(vec3 c)
     return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);
 }
 
+// void main() {
+//   //centered texture coordinates
+//   vec2 uv = vec2(gl_FragCoord.xy / u_resolution.xy) - 0.5;
+
+//   //correct aspect
+//   uv.x *= u_resolution.x / u_resolution.y;
+
+//   //animate zoom
+// //   uv /= sin(u_time); 
+
+//   //radial distance
+//   float len = length(uv);
+
+//   //anti-alias
+//   len = aastep(0.1, len);
+
+//   gl_FragColor.rgb = vec3(len);
+//   gl_FragColor.a   = 1.0;
+// }
 void main()
 {
     float aspect=u_resolution.x/u_resolution.y;
